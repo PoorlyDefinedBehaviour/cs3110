@@ -1,0 +1,2 @@
+(executable
+ (name label_and_optional_arguments))

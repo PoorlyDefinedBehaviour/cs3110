@@ -1,0 +1,2 @@
+(executable
+ (name one_of_vs_each_of))

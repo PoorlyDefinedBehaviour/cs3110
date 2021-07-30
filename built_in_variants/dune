@@ -1,0 +1,2 @@
+(executable
+ (name built_in_variants))

@@ -1,0 +1,2 @@
+(executable
+ (name recursive_variants))

@@ -1,0 +1,2 @@
+(executable
+ (name higher_order_functions_map))

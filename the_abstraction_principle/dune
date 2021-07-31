@@ -1,0 +1,2 @@
+(executable
+ (name the_abstraction_principle))

@@ -1,0 +1,2 @@
+(executable
+ (name fold_vs_recursive_vs_library))

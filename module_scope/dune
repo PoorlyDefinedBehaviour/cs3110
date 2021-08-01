@@ -1,0 +1,2 @@
+(executable
+ (name module_scope))

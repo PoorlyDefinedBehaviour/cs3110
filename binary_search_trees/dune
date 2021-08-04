@@ -1,0 +1,2 @@
+(executable
+ (name binary_search_trees))

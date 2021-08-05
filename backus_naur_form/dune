@@ -1,0 +1,2 @@
+(executable
+ (name backus_naur_form))

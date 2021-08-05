@@ -84,4 +84,4 @@ let _ =
   in 
     mem 2 tree |> string_of_bool |> print_endline; (* true *)
     mem 0 tree |> string_of_bool |> print_endline; (* false *)
-    tree |> pp_tree |> print_endline; (* Node(2, Node(1, Leaf, Leaf), Node(3, Leaf, Leaf)) *)
+    tree |> pp_tree |> print_endline; (* Node(Black, 2, Node(Red, 1, Leaf, Leaf), Node(Red, 3, Leaf, Leaf)) *)

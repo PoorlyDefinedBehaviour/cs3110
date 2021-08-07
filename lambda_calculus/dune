@@ -1,0 +1,7 @@
+(executable
+ (name lambda_calculus))
+
+(ocamllex lexer)
+
+(menhir
+ (modules parser))

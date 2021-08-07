@@ -146,7 +146,7 @@ We need to formally define what substitute means.
 It turns out to be rather tricky. So, rather than getting
 side-tracked by it right now, let's assume a new notation:
 
-e'{e/x}, which menas, the expression e' with e substituted for x.
+e'{e/x}, which means, the expression e' with e substituted for x.
 
 For now, we can add this rule:
 
@@ -167,33 +167,162 @@ let is_value expression =
 
 (**
 [subst expression value x] is [expression{value/x}]
+
+Defining substitution
+
+Constants have no variables appearing in them
+(e.g., x cannot syntactically occur in 42),
+so substitution leaves them unchanged:
+
+integer{e/x} = integer
+bool{e/x} = bool
+
+For binary operators and if expressions,
+all that substitution needs to do is to recurse
+inside the subexpressions:
+
+(e1 binop e2){e/x} = e1{e/x} binop e2{e/x}
+
+(if e1 then e2 else e3){e/x} = if e1{e/x} then e2{e/x} else e3{e/x}
+
+Variables
+
+There are two possibilities: either we encounter the variable x
+, which means we should do the substitution, or we encounter
+some other variable with a different name, say y, in which
+case we should not do the substitution:
+
+x{e/x} = e
+y{e/x} = y  
+
+Example:
+
+Suppose we wre trying to figure out the result of
+(x + 42){1/x}
+
+(x + 42){1/x}
+= x{1/x} + 42{1/x}
+= 1 + 42{1/x}
+= 1 + 42
+= 43
 *)
-let subst _ _ _ = failwith "not implemented yet"
+let rec subst expression value x = 
+  match expression with 
+  | Var(y) -> if x = y then value else expression
+  | Bool(_) -> expression
+  | Int(_) -> expression
+  | Binary(operator, e1, e2) -> Binary(operator, subst e1 value x, subst e2 value x)
+  | Let(y, e1, e2) ->
+      let e1' = subst e1 value x in
+      if x = y then 
+        Let(y, e1', e2)
+      else 
+        Let(y, e1', subst e2 value x)
+  | If(e1, e2, e3) ->
+      If(subst e1 value x, subst e2 value x, subst e3 value x)
 
 (**
-[step] is the [-->] relation, that is, a single step
+[small_step] is the [-->] relation, that is, a single step
 of evaluation.
 *)
-let rec step expression = 
+let rec small_step expression = 
   match expression with 
   | Int _ | Bool _ -> failwith "Does not step"
   | Var _ -> failwith "Unbounded variable"
   | Binary(operator, e1, e2) when is_value e1 && is_value e2 ->
-      step_binary_operation operator e1 e2 
+      small_step_binary_operation operator e1 e2 
   | Binary(operator, e1, e2) when is_value e1 ->
-      Binary(operator, e1, step e2)
+      Binary(operator, e1, small_step e2)
   | Binary (operator, e1, e2) ->
-      Binary(operator, step e1, e2)
+      Binary(operator, small_step e1, e2)
   | Let(identifier, e1, e2) when is_value e1 -> subst e2 e1 identifier
-  | Let(identifier, e1, e2) -> Let(identifier, step e1, e2)
+  | Let(identifier, e1, e2) -> Let(identifier, small_step e1, e2)
   | If(Bool(true), e2, _) -> e2
   | If(Bool(false), _, e3) -> e3 
   | If(Int _, _, _) -> failwith "If condition must have type bool"
-  | If(e1, e2, e3) -> If(step e1, e2, e3)
+  | If(e1, e2, e3) -> If(small_step e1, e2, e3)
 and 
-  step_binary_operation operator e1 e2 = 
+  small_step_binary_operation operator e1 e2 = 
     match (operator, e1, e2) with 
     | (Add, Int(a), Int(b)) -> Int(a + b)
     | (Multiply, Int(a), Int(b)) -> Int(a * b)
     | (LessThanOrEqual, Int(a), Int(b)) -> Bool(a <= b)
     | _ -> failwith "Operator and operand type mismatch"
+
+(*
+The Multistep Relation
+
+Now that we've define -->, there's really nothing left to do
+to define -->*. It's just the reflexive transitive closure
+of -->. In other other, it can be defined with just these
+two rules:
+
+e -->* e
+
+e -->* e''
+    if e --> e' --> and e' -->* e''
+
+Defining the Big-Step relation
+
+Constants are easy, because they big-step themselves:
+
+integer ==> integer
+
+bool ==> bool
+
+Binary operators just big-step both of their subexpressions,
+then apply whatever the primitive operator is:
+
+e1 binop e2 ==> v
+  if e1 ==> v1
+  and e2 ==> v2
+  and v is the result of primitive operation v1 binop v2
+
+If expressions big step the condition, then big step one of the branches:
+
+if e1 then e2 else e3 ==> v2
+  if e1 ==> true
+  and e2 ==> v2
+
+if e1 then e2 else e3 ==> v3
+  if e1 ==> false
+    and e3 ==> v3
+
+Let expressions big step the binding expression, do a substitution,
+and big step the result of the substitution
+
+let x = e1 in e2 ==> v2
+  if e1 ==> v1
+  and e2{v1/x} ==> v2
+
+Finally, variables do not big step, for the same reason as with
+the small step semantics -- a well-typed program will never
+reach the point of attempting to evaluate a variable name:
+
+x =/=>
+*)
+(**
+[big_step] is the ==>] relation, that is, takes multiple
+steps until a value is produced.
+*)
+let rec big_step expression =
+  match expression with 
+  | Int _ | Bool _ -> expression 
+  | Var _ -> failwith "Unbounded variable"
+  | Binary(operator, e1, e2) -> 
+      big_step_binary_operation operator (big_step e1) (big_step e2)
+  | If(condition, e1, e2) -> big_step_if condition e1 e2
+  | Let(x, e1, e2) -> subst e2 (big_step e1) x |> big_step
+and
+  big_step_binary_operation operator e1 e2 = 
+  match (operator, e1, e2) with 
+  | (Add, Int(a), Int(b)) -> Int(a + b)
+  | (Multiply, Int(a), Int(b)) -> Int(a * b)
+  | (LessThanOrEqual, Int(a), Int(b)) -> Bool(a <= b)
+  | _ -> failwith "Operator and operand type mismatch"
+and
+  big_step_if condition consequence alternative =
+  match big_step condition with 
+  | Bool(true) -> big_step consequence
+  | Bool(false) -> big_step alternative 
+  | _ -> failwith "If condition must have type bool"

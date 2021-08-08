@@ -90,4 +90,77 @@ If expressions
   and Γ ⊢ expr2 : type1
   and Γ ⊢ expr3 : type1
 *)
-let () = print_endline "Hello, World!"
+open Ast
+
+type typ = 
+  | TInt 
+  | TBool
+
+let pp_typ typ = 
+  match typ with 
+  | TInt -> "TInt"
+  | TBool -> "TBool"
+
+module TypingContext = struct 
+  type t = (string * typ) list 
+
+  let empty = []
+
+  let lookup = List.assoc_opt
+
+  let extend context identifier typ = (identifier, typ) :: context  
+end
+
+let rec typeof context expr = 
+  match expr with 
+  | Int(_) -> TInt
+  | Bool(_) -> TBool 
+  | Var(x) -> 
+      (match TypingContext.lookup x context with 
+      | None -> failwith (Format.sprintf "Unbounded variable %s" x)
+      | Some(typ) -> typ)
+  | Let(x, expr1, expr2) -> 
+      let type1 = typeof context expr1 in
+      let context' = TypingContext.extend context x type1 in
+      typeof context' expr2
+  | Binary(operator, expr1, expr2) -> 
+      let type1 = typeof context expr1 in
+      let type2 = typeof context expr2 in
+
+      (match(operator, type1, type2) with 
+      | (Add, TInt, TInt) -> TInt 
+      | (Multiply, TInt, TInt) -> TInt
+      | (LessThanOrEqual, TInt, TInt) -> TBool
+      | _ -> failwith "Operator and operand type mistmatch")
+  | If(expr1, expr2, expr3) -> 
+      let type1 = typeof context expr1 in
+      let type2 = typeof context expr2 in 
+      let type3 = typeof context expr3 in 
+    
+      if type1 <> TBool then 
+        failwith (Format.sprintf "If condition must have type bool, got %s" (pp_typ type1))
+      else if type2 <> type3 then 
+        failwith (Format.sprintf "If branches must have the same type, got if %s then %s else %s" (pp_typ type1) (pp_typ type2) (pp_typ type3))
+      else 
+        type3 
+
+let parse (s: string): expression = 
+  let lexbuf = Lexing.from_string s in
+  let ast = Parser.program Lexer.read lexbuf in 
+  ast
+
+let _ = 
+  (* TInt *)
+  "1" |> parse |> typeof TypingContext.empty |> pp_typ |> print_endline; 
+
+  (* TBool *)
+  "true" |> parse |> typeof TypingContext.empty |> pp_typ |> print_endline; 
+
+  (* TInt *)
+  "let x = 1 in x" |> parse |> typeof TypingContext.empty |> pp_typ |> print_endline; 
+
+  (* TInt *)
+  "let x = 1 in x + x" |> parse |> typeof TypingContext.empty |> pp_typ |> print_endline; 
+
+  (* TInt *)
+  "let x = 1 in if x <= 5 then x + 1 else x * 2" |> parse |> typeof TypingContext.empty |> pp_typ |> print_endline; 

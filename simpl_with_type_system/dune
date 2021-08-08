@@ -1,2 +1,7 @@
 (executable
  (name simpl_with_type_system))
+
+(ocamllex lexer)
+
+(menhir
+ (modules parser))

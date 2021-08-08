@@ -100,6 +100,62 @@ let parse (s: string): expression =
   let ast = Parser.program Lexer.read lexbuf in 
   ast
 
+let is_value expression = 
+  match expression with 
+  | Abs _ -> true 
+  | Var _ | App _ -> false
+
+let gensym = 
+  let counter = ref 0 in 
+  fun () -> 
+  incr counter;
+  "$x" ^ string_of_int !counter
+
+let rec replace expression new_variable_name old_variable_name = 
+  match expression with
+  | Var(x) -> if x = old_variable_name then Var(new_variable_name) else expression
+  | App(e1, e2) -> App(replace e1 new_variable_name old_variable_name, replace e2 new_variable_name old_variable_name)
+  | Abs(x, e') -> 
+    let x' = if x = old_variable_name then 
+      new_variable_name 
+    else 
+      old_variable_name
+    in
+    Abs(x', replace e' new_variable_name old_variable_name)
+
+module VarSet = Set.Make(String)
+
+let rec free_variables expression =
+  match expression with 
+  | Var(x) -> VarSet.singleton x
+  | App(e1, e2) -> VarSet.union (free_variables e1) (free_variables e2)
+  | Abs(x, e) -> VarSet.diff (free_variables e) (VarSet.singleton x)
+
+let rec subst expression value x = 
+  match expression with 
+  | Var(y) -> if x = y then value else expression
+  | App(e1, e2) -> App(subst e1 value x, subst e2 value x)
+  | Abs(y, e') ->
+    if x = y then 
+      expression 
+    else if not (VarSet.mem y (free_variables value)) then 
+      Abs(y, subst e' value x)
+    else 
+      let new_variable_name = gensym() in
+      let new_body = replace e' y new_variable_name in 
+      Abs(new_variable_name, subst new_body value x)
+
+let rec eval expression = 
+  match expression with
+  | Var(x) -> failwith (Format.sprintf "Unbounded variable %s" x)
+  | App(e1, e2) -> eval_app e1 e2
+  | Abs _ -> expression
+and 
+eval_app e1 e2 =
+  match e1 with
+  | Abs(x, e) -> subst e (eval e2) x |> eval
+  | _ -> failwith "Tried to app non function"
+
 let _ = 
   (* (fun t -> (fun f -> Var(t))) *)
   "fun t -> fun f -> t" |> parse |> pp_ast |> print_endline;
@@ -112,3 +168,18 @@ let _ =
 
   (* (fun bool -> App(App(Var(bool), Var(false)), Var(true))) *)
   "fun bool -> bool false true" |> parse |> pp_ast |> print_endline;
+
+  (* (fun y -> Var(y)) *)
+  "(fun x -> x) (fun y -> y)" |> parse |> eval |> pp_ast |> print_endline;
+
+  (* (fun t -> (fun f -> Var(t))) *)
+  "fun t -> fun f -> t" |> parse |> eval |>pp_ast |> print_endline;
+
+  (* (fun a -> (fun b -> App(App(Var(a), Var(b)), Var(false)))) *)
+  "fun a -> fun b -> a b false" |> parse |> eval |> pp_ast |> print_endline;  
+
+  (* (fun a -> (fun b -> App(App(Var(a), Var(true)), Var(b)))) *)
+  "fun a -> fun b -> a true b" |> parse |> eval |> pp_ast |> print_endline;
+
+  (* (fun bool -> App(App(Var(bool), Var(false)), Var(true))) *)
+  "fun bool -> bool false true" |> parse |> eval |> pp_ast |> print_endline;

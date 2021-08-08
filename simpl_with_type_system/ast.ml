@@ -1,26 +1,3 @@
-
-(*
-As a running example for the next few sections,
-we'll use a very simple programming language that we call
-SimPL. Here is its syntax in BNF:
-
-expression ::= 
-  identifier 
-  | integer 
-  | bool 
-  | expression1 binary_operator expression2
-  | let x = expression1 in expression2
-  | if expression1 then expression2 else expression3
-
-binary_operator := + | * | <=
-
-identifier := <identifier>
-
-integer := <integer>
-
-bool ::= true | false
-*)
-
 (* binary_operator *)
 type binary_operator = 
   | Add (* + *)

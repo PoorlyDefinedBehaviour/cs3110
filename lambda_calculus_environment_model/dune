@@ -1,0 +1,7 @@
+(executable
+ (name lambda_calculus_environment_model))
+
+(ocamllex lexer)
+
+(menhir
+ (modules parser))

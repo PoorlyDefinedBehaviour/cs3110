@@ -131,7 +131,7 @@ let rec typeof context expr =
       | (Add, TInt, TInt) -> TInt 
       | (Multiply, TInt, TInt) -> TInt
       | (LessThanOrEqual, TInt, TInt) -> TBool
-      | _ -> failwith "Operator and operand type mistmatch")
+      | _ -> failwith (Format.sprintf "Operator and operand type mismatch: operation %s with %s and %s" (pp_binary_operator operator) (pp_typ type1) (pp_typ type2)))
   | If(expr1, expr2, expr3) -> 
       let type1 = typeof context expr1 in
       let type2 = typeof context expr2 in 

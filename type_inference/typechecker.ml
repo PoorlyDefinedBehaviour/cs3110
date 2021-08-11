@@ -117,10 +117,28 @@ let rec infer context expr =
       in
         debug_subst_typ (merge_subst_map (merge_subst_map s1 s2) s3);
         (merge_subst_map (merge_subst_map s1 s2) s3, typ)
-      
+  | App(e1, e2) ->
+      debug_expr e1;
+      debug_expr e2;
+      let (s1, typ1) = infer context e1 in 
+      let (s2, typ2) = infer context e2 in
+
+      let s3 = merge_subst_map s1 s2 in 
+
+      (match (typ1, typ2) with
+      | (TVar(a), typ2) -> 
+          let s3 = 
+            s3 
+            |> SubstitutionMap.remove a
+            |> SubstitutionMap.add a (TAbs(typ2, gen_type_var()))
+          in 
+            (s3, gen_type_var())
+      | (TAbs(input_typ, body_typ), typ2) when input_typ = typ2 -> (s3, body_typ)
+      | (typ1, typ2) -> failwith (Format.sprintf "Type error: got %s applied to %s" (pp_typ typ1) (pp_typ typ2)))
   | Abs(x, e1) ->
       let type_var = gen_type_var() in
       let context' = TypingContext.remove x context in 
+      print_endline ("setting " ^ x ^ " type to " ^ (pp_typ type_var));
       let context'' = TypingContext.add x (Scheme([], type_var)) context' in
       let (substitutions, typ) = infer context'' e1 in 
       debug_expr_typ e1 typ;
@@ -129,7 +147,8 @@ let rec infer context expr =
   | _ -> failwith (Format.sprintf "not yet implemented for %s" (pp_ast expr))
 
 let typecheck expr =
-  let (_, typ) = infer TypingContext.empty expr in 
+  let (s, typ) = infer TypingContext.empty expr in 
+  let typ = subst s typ in 
   debug_expr_typ expr typ;
-  typ
+  ()
   

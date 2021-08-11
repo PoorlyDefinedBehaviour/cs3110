@@ -468,4 +468,4 @@ let parse (s: string): expression =
   ast
 
 let () = 
-  "fun x -> fun y -> x + 2 + y" |> parse |> typecheck |> pp_typ |> print_endline;
+  "fun f -> fun x -> f (x + 1)" |> parse |> typecheck;

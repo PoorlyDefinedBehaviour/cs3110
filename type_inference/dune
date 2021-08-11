@@ -1,0 +1,7 @@
+(executable
+ (name type_inference))
+
+(ocamllex lexer)
+
+(menhir
+ (modules parser))

@@ -12,39 +12,9 @@ let rec pp_typ typ =
   | TInt -> "int"
   | TBool -> "bool"
   | TAbs(argument_typ, body_typ) -> 
-      Format.sprintf ("%s -> %s") (pp_typ argument_typ) (pp_typ body_typ)
-
-module TypeVariablesSet = Set.Make(String)
-
-let rec free_type_variables typ = 
-  match typ with 
-  | TVar(x) -> TypeVariablesSet.singleton x
-  | TInt -> TypeVariablesSet.empty
-  | TBool -> TypeVariablesSet.empty
-  | TAbs(argument_typ, body_typ) ->
-      TypeVariablesSet.union (free_type_variables argument_typ) (free_type_variables body_typ)
-
-module SubstitutionMap = Map.Make(String)
-
-let merge_subst_map m1 m2 = 
-  SubstitutionMap.merge 
-      (fun _ x0 y0 -> 
-         match x0, y0 with 
-         | None, None -> None
-         | None, Some v | Some v, None -> Some v
-         | Some _, Some v -> Some v)
-      m1 m2
-
-let pp_substitutions substitutions = 
-  let bindings = 
-    substitutions
-    |> SubstitutionMap.bindings
-    |> List.map (fun (key, value) -> key ^ ": " ^ (pp_typ value))
-  in 
-    "{" ^ String.concat ", " bindings ^ "}"
+      Format.sprintf "(%s -> %s)" (pp_typ argument_typ) (pp_typ body_typ)
 
 module TypingContext = Map.Make(String)
-
 
 let pp_typing_context context = 
   let bindings = 
@@ -54,11 +24,7 @@ let pp_typing_context context =
   in 
     "{" ^ String.concat ", " bindings ^ "}"
 
-let debug_typing_context context = 
-  print_endline ("typing context: " ^ pp_typing_context context);
-  ()
-
-let gen_type_var =
+let gen_existential_type_var =
   let alphabet = [|"a";"b";"c";"d";"e";"f";"g";"h";"i";"j";"k";"l";"m";"n";"o";"p";"q";"r";"s";"t";"u";"v";"w";"x";"y";"z"|] in 
   let generation = ref "'" in
   let i = ref 0 in 
@@ -74,13 +40,16 @@ let gen_type_var =
 
     type_var
 
-let debug_expr_typ expr typ =
-  print_endline (pp_expr expr ^ " has type " ^ pp_typ typ); 
-  ()
+let rec subst typ type_var new_typ = 
+  match typ with 
+  | TInt -> TInt 
+  | TBool -> TBool
+  | TVar(_) as typ' -> if typ' = type_var then new_typ else typ'
+  | TAbs(t1, t2) -> TAbs(subst t1 type_var new_typ, subst t2 type_var new_typ)
 
-let debug_subst_typ substitutions = 
-  print_endline ("substitutions: " ^ pp_substitutions substitutions);
-  ()
+let subst_existential_type_vars context type_var typ = 
+  context 
+  |> TypingContext.map (fun typ' -> subst typ' type_var typ)
 
 let rec unify context typ1 typ2 = 
   match (typ1, typ2) with 
@@ -95,9 +64,16 @@ let rec unify context typ1 typ2 =
       let (context, t1) = unify context input_typ1 input_typ2 in 
       let (context, t2) = unify context body_typ1 body_typ2 in 
       (context, TAbs(t1, t2))
-  | (TVar(a), typ) -> (TypingContext.add a typ context, typ)
-  | (typ, TVar(a)) -> (TypingContext.add a typ context, typ)
-  | _ -> failwith (Format.sprintf "not yet implemented for %s and %s" (pp_typ typ1) (pp_typ typ2))
+  | (TAbs(input_typ, body_typ), typ) ->
+      let (context, t1) = unify context input_typ typ in 
+      let (context, t2) = unify context body_typ typ in 
+      (context, TAbs(t1, t2))
+  | (TVar(_) as type_var, typ) -> 
+      let context = subst_existential_type_vars context type_var typ in
+      (context, subst typ type_var typ)
+  | _ -> 
+    print_endline (pp_typing_context context);
+    failwith (Format.sprintf "unify not yet implemented for %s and %s" (pp_typ typ1) (pp_typ typ2))
 
 let rec infer context expr =
   match expr with
@@ -107,59 +83,62 @@ let rec infer context expr =
       (match TypingContext.find_opt x context with 
       | None -> failwith (Format.sprintf "Unbounded variable %s" x)
       | Some(typ) -> (context, typ))
+  | If(e1, e2, e3) ->
+      let (context, t1) = infer context e1 in 
+      let (context, t2) = infer context e2 in 
+      let (context, t3) = infer context e3 in 
+
+      let (context, _) = unify context t1 TBool in 
+
+      unify context t2 t3
   | Binary(Add, e1, e2) ->
       let (context, typ1) = infer context e1 in
-      let (context, typ2) = infer context e2 in
-      print_endline "-------";
-      
-      
       let (context, _) = unify context typ1 TInt in
-      debug_typing_context context;
-      let (context, typ) = unify context typ2 TInt in
-      print_endline "-------";
-      (context, typ)
-  | App(e1, e2) ->
-      print_endline "--- infer app ---";
-
-      let (context, typ1) = infer context e1 in 
 
       let (context, typ2) = infer context e2 in
-
-      let (context, typ3) = unify context typ2 (gen_type_var()) in 
+      let (context, _) = unify context typ2 TInt in
     
-      let (context, _) = unify context typ1 (TAbs(typ2, typ3)) in 
+      (context, TInt)
+  | Binary(And, e1, e2) ->
+      print_endline ("binary " ^ string_of_expr e1 ^ " and " ^ string_of_expr e2);
+      let (context, t1) = infer context e1 in 
+      print_endline (pp_typ t1);
+      print_endline (pp_typing_context context);
+      let (context, _) = unify context t1 TBool in 
 
-      print_endline "--- infer app ---";
-      (context, typ3)
+      let (context, t2) = infer context e2 in 
+      let (context, _) = unify context t2 TBool in 
 
+      (context, TBool)
+  | App(e1, e2) ->
+      let (context, function_type) = infer context e1 in 
+      let (context, argument_type) = infer context e2 in 
+
+      (match function_type with 
+      | TAbs(parameter_type, body_type) -> 
+          let (context, _) = unify context parameter_type argument_type in 
+          (context, body_type)
+      | TVar(_) as type_var ->
+          let new_type_var = gen_existential_type_var() in
+          let function_type = TAbs(argument_type, new_type_var) in 
+          let context = subst_existential_type_vars context type_var function_type in 
+          print_endline (pp_typing_context context);
+          (context, new_type_var)
+      | _ -> failwith (Format.sprintf "Type error: tried to apply %s : %s to %s : %s" (pp_expr e1) (pp_typ function_type) (pp_expr e2) (pp_typ argument_type)))
   | Abs(x, e1) ->
-      print_endline "--- infer abs ---";
-      let type_var = gen_type_var() in
-      print_endline ("setting " ^ x ^ " type to " ^ (pp_typ type_var));
-      let context = TypingContext.add x type_var context in
-      let (context, body_typ) = infer context e1 in 
-      debug_typing_context context;
-      debug_expr_typ e1 body_typ;
-      
-      let input_typ = 
-        match type_var with 
-        | TVar(a) -> 
-            (match TypingContext.find_opt a context with 
-            | None -> type_var 
-            | Some(typ) -> typ)
-        | _ -> failwith "unreachable"
-      in
-        debug_expr_typ e1 input_typ;
-        debug_typing_context context;
-        let context = TypingContext.add x input_typ context in 
-        debug_typing_context context;
-        print_endline "--- infer abs ---";
-        (context, TAbs(input_typ, body_typ))
-  | _ -> failwith (Format.sprintf "not yet implemented for %s" (pp_expr expr))
+      let type_var = gen_existential_type_var() in 
+      let context = TypingContext.add x type_var context in 
+      let (context, t2) = infer context e1 in 
+      let t1 = TypingContext.find x context in 
+      (context, TAbs(t1, t2))
+  | Let(x, e1, e2) ->
+      let (context, t1) = infer context e1 in 
+      let context = TypingContext.add x t1 context in 
+      infer context e2
 
 let typecheck expr =
+  print_endline (string_of_expr expr);
   let (context, typ) = infer TypingContext.empty expr in 
-  debug_typing_context context;
-  debug_expr_typ expr typ;
+  print_endline (Format.sprintf "%s ⊢ %s : %s" (pp_typing_context context) (pp_expr expr) (pp_typ typ));
   ()
   

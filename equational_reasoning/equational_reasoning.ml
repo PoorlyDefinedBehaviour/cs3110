@@ -49,6 +49,8 @@ and
   (f << (g << h)) x
 = (f << g) (h x)
 = f (g (h x))
+
+[END] Example 2
 *)
 
 let () = print_endline "Hello, World!"

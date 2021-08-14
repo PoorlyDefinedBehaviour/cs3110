@@ -1,0 +1,2 @@
+(executable
+ (name induction_on_natural_numbers))
